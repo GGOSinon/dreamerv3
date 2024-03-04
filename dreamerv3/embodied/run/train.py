@@ -57,14 +57,16 @@ def train(agent, env, replay, logger, args):
   driver = embodied.Driver(env)
   driver.on_episode(lambda ep, worker: per_episode(ep))
   driver.on_step(lambda tran, _: step.increment())
-  driver.on_step(replay.add)
+  #driver.on_step(replay.add)
 
+  '''
   print('Prefill train dataset.')
   random_agent = embodied.RandomAgent(env.act_space)
   while len(replay) < max(args.batch_steps, args.train_fill):
     driver(random_agent.policy, steps=100)
   logger.add(metrics.result())
   logger.write()
+  '''
 
   dataset = agent.dataset(replay.dataset)
   state = [None]  # To be writable from train step function below.
@@ -84,6 +86,7 @@ def train(agent, env, replay, logger, args):
       agg = metrics.result()
       report = agent.report(batch[0])
       report = {k: v for k, v in report.items() if 'train/' + k not in agg}
+      print(report)
       logger.add(agg)
       logger.add(report, prefix='report')
       logger.add(replay.stats, prefix='replay')
@@ -96,9 +99,9 @@ def train(agent, env, replay, logger, args):
   checkpoint.step = step
   checkpoint.agent = agent
   checkpoint.replay = replay
-  if args.from_checkpoint:
-    checkpoint.load(args.from_checkpoint)
-  checkpoint.load_or_save()
+  #if args.from_checkpoint:
+  #  checkpoint.load(args.from_checkpoint)
+  #checkpoint.load_or_save()
   should_save(step)  # Register that we jused saved.
 
   print('Start training loop.')

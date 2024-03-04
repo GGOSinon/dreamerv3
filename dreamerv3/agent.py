@@ -114,7 +114,6 @@ class Agent(nj.Module):
     obs['cont'] = 1.0 - obs['is_terminal'].astype(jnp.float32)
     return obs
 
-
 class WorldModel(nj.Module):
 
   def __init__(self, obs_space, act_space, config):
@@ -124,7 +123,9 @@ class WorldModel(nj.Module):
     shapes = {k: tuple(v.shape) for k, v in obs_space.items()}
     shapes = {k: v for k, v in shapes.items() if not k.startswith('log_')}
     self.encoder = nets.MultiEncoder(shapes, **config.encoder, name='enc')
-    self.rssm = nets.RSSM(**config.rssm, name='rssm')
+    #self.rssm = nets.RSSM(**config.rssm, name='rssm')
+    self.ensembles = 5
+    self.rssm = nets.EnsembleRSSM(self.ensembles, **config.rssm, name='rssm')
     self.heads = {
         'decoder': nets.MultiDecoder(shapes, **config.decoder, name='dec'),
         'reward': nets.MLP((), **config.reward_head, name='rew'),
@@ -284,7 +285,8 @@ class ImagActorCritic(nj.Module):
       offset, invscale = self.retnorms[key](ret)
       normed_ret = (ret - offset) / invscale
       normed_base = (base - offset) / invscale
-      advs.append((normed_ret - normed_base) * self.scales[key] / total)
+      weight = jnp.where(normed_ret > normed_base, 0.2, 0.8)
+      advs.append((normed_ret - normed_base) * weight * self.scales[key] / total)
       metrics.update(jaxutils.tensorstats(rew, f'{key}_reward'))
       metrics.update(jaxutils.tensorstats(ret, f'{key}_return_raw'))
       metrics.update(jaxutils.tensorstats(normed_ret, f'{key}_return_normed'))
@@ -339,8 +341,11 @@ class VFunction(nj.Module):
   def loss(self, traj, target):
     metrics = {}
     traj = {k: v[:-1] for k, v in traj.items()}
-    dist = self.net(traj)
-    loss = -dist.log_prob(sg(target))
+    dist = self.net(traj); current_v = dist.mode()
+    #jax.debug.print('{x}', x=target)
+    weight = jnp.where(current_v < target, 0.1, 0.9)
+    loss = ((sg(target) - current_v) ** 2) * weight
+    #loss = -dist.log_prob(sg(target)) * weight
     if self.config.critic_slowreg == 'logprob':
       reg = -dist.log_prob(sg(self.slow(traj).mean()))
     elif self.config.critic_slowreg == 'xent':

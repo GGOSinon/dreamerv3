@@ -13,6 +13,8 @@ from . import jaxutils
 from . import ninjax as nj
 cast = jaxutils.cast_to_compute
 
+class EnsembleRSSM(nj.Module):
+  def __init__(self, num_ensembles, **kw):
 
 class RSSM(nj.Module):
 

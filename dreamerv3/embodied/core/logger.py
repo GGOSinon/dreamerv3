@@ -228,14 +228,14 @@ class TensorBoardOutput(AsyncOutput):
 
 class WandBOutput:
 
-  def __init__(self, pattern, logdir, config):
+  def __init__(self, pattern, env_name, config, wandb_key):
     self._pattern = re.compile(pattern)
     import wandb
+    wandb.login(key=wandb_key)
     wandb.init(
         project="dreamerv3",
-        name=logdir.name,
-        # sync_tensorboard=True,,
-        entity='word-bots',
+        name=f"{env_name}",
+        # sync_tensorboard=True,,,
         config=dict(config),
     )
     self._wandb = wandb
