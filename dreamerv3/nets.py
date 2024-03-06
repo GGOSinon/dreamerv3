@@ -14,13 +14,53 @@ from . import ninjax as nj
 cast = jaxutils.cast_to_compute
 
 class EnsembleRSSM(nj.Module):
-  def __init__(self, num_ensembles, **kw):
+  def __init__(self, num_ensembles, name='rssm', **kw):
+    self.num_ensembles = num_ensembles
+    self.rssms = []
+    for i in range(num_ensembles):
+        self.rssms.append(RSSM(**kw, name=f'{name}_i'))
+
+  def initial(self, bs):
+    res = []
+    for i in range(self.num_ensembles):
+        res.append(self.rssms[i].initial())
+
+  def observe(self, embed, action, is_first, state=None):
+    if state is None:
+      state = self.initial(action.shape[0])
+
+    post, prior = [], []
+    for i in range(self.num_ensembles):
+      _post, _prior = self.rssms[i].observe(key, embed, action, is_first, state[i])
+      post.append(_post); prior.append(_prior)
+    post = {k: jnp.stack([_post[k] for _post in post], axis=0) for k in post[0]}
+    prior = {k: jnp.stack([_prior[k] for _prior in prior], axis=0) for k in prior[0]}
+    idx = jax.random.choice(key, self._ensemble, (1, batch_size))
+    post = {k: jnp.take_along_axis(post[k], idx.reshape((1, batch_size,) + (1,)*(len(post[k].shape)-2)), axis=0)[0] for k in post}
+    prior = {k: jnp.take_along_axis(prior[k], idx.reshape((1, batch_size,) + (1,)*(len(prior[k].shape)-2)), axis=0)[0] for k in prior}
+    return post, prior
+
+  def imagine(self, action, state=None):
+    if state is None:
+      state = self.initial(action.shape[0])
+
+    prior = []
+    for i in range(self.num_ensembles):
+      _prior = self.rssms[i].imagine(action, state[i])
+      prior.append(_prior)
+    prior = {k: jnp.stack([_prior[k] for _prior in prior], axis=0) for k in prior[0]}
+    idx = jax.random.choice(key, self._ensemble, (1, batch_size))
+    prior = {k: jnp.take_along_axis(prior[k], idx.reshape((1, batch_size,) + (1,)*(len(prior[k].shape)-2)), axis=0)[0] for k in prior}
+    return prior
+ 
+  def dyn_loss(self, post, prior, impl='kl', free=1.0):
+    return 
+      
 
 class RSSM(nj.Module):
-
   def __init__(
       self, deter=1024, stoch=32, classes=32, unroll=False, initial='learned',
-      unimix=0.01, action_clip=1.0, **kw):
+      unimix=0.01, action_clip=1.0, name=None, **kw):
     self._deter = deter
     self._stoch = stoch
     self._classes = classes
@@ -28,6 +68,7 @@ class RSSM(nj.Module):
     self._initial = initial
     self._unimix = unimix
     self._action_clip = action_clip
+    self._name = name
     self._kw = kw
 
   def initial(self, bs):
@@ -45,7 +86,7 @@ class RSSM(nj.Module):
     if self._initial == 'zeros':
       return cast(state)
     elif self._initial == 'learned':
-      deter = self.get('initial', jnp.zeros, state['deter'][0].shape, f32)
+      deter = self.get(f'{self.name}/initial', jnp.zeros, state['deter'][0].shape, f32)
       state['deter'] = jnp.repeat(jnp.tanh(deter)[None], bs, 0)
       state['stoch'] = self.get_stoch(cast(state['deter']))
       return cast(state)

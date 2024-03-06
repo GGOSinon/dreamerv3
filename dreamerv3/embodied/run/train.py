@@ -99,9 +99,16 @@ def train(agent, env, replay, logger, args):
   checkpoint.step = step
   checkpoint.agent = agent
   checkpoint.replay = replay
-  #if args.from_checkpoint:
+  #if args.from_checkpoint
   #  checkpoint.load(args.from_checkpoint)
   #checkpoint.load_or_save()
+  checkpoint.save()
+
+  import pprint
+  import jax.numpy as jnp
+  _ckpt = checkpoint['agent']
+  _ckpt = {k: v for (k, v) in _ckpt.items() if 'rssm' in k}
+  pprint.pprint(jax.tree_util.tree_map(jnp.shape, _ckpt), width=1)
   should_save(step)  # Register that we jused saved.
 
   print('Start training loop.')

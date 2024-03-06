@@ -4,7 +4,7 @@ from setuptools import find_namespace_packages
 
 
 setuptools.setup(
-    name='dreamerv3',
+    name='dreamerv3_offline',
     version='1.5.0',
     description='Mastering Diverse Domains through World Models',
     author='Danijar Hafner',

@@ -18,7 +18,6 @@ from . import jaxutils
 from . import nets
 from . import ninjax as nj
 
-
 @jaxagent.Wrapper
 class Agent(nj.Module):
 
@@ -124,12 +123,13 @@ class WorldModel(nj.Module):
     shapes = {k: v for k, v in shapes.items() if not k.startswith('log_')}
     self.encoder = nets.MultiEncoder(shapes, **config.encoder, name='enc')
     #self.rssm = nets.RSSM(**config.rssm, name='rssm')
-    self.ensembles = 5
-    self.rssm = nets.EnsembleRSSM(self.ensembles, **config.rssm, name='rssm')
+    self.ensembles = config.num_ensembles
+    self.rssm = nets.EnsembleRSSM(self.ensembles, name='rssms', **config.rssm)
     self.heads = {
         'decoder': nets.MultiDecoder(shapes, **config.decoder, name='dec'),
         'reward': nets.MLP((), **config.reward_head, name='rew'),
-        'cont': nets.MLP((), **config.cont_head, name='cont')}
+        'cont': nets.MLP((), **config.cont_head, name='cont')
+    }
     self.opt = jaxutils.Optimizer(name='model_opt', **config.model_opt)
     scales = self.config.loss_scales.copy()
     image, vector = scales.pop('image'), scales.pop('vector')
@@ -285,7 +285,7 @@ class ImagActorCritic(nj.Module):
       offset, invscale = self.retnorms[key](ret)
       normed_ret = (ret - offset) / invscale
       normed_base = (base - offset) / invscale
-      weight = jnp.where(normed_ret > normed_base, 0.2, 0.8)
+      weight = jnp.where(normed_ret > normed_base, self.config.expectile, 1 - self.config.expectile)
       advs.append((normed_ret - normed_base) * weight * self.scales[key] / total)
       metrics.update(jaxutils.tensorstats(rew, f'{key}_reward'))
       metrics.update(jaxutils.tensorstats(ret, f'{key}_return_raw'))
@@ -343,7 +343,7 @@ class VFunction(nj.Module):
     traj = {k: v[:-1] for k, v in traj.items()}
     dist = self.net(traj); current_v = dist.mode()
     #jax.debug.print('{x}', x=target)
-    weight = jnp.where(current_v < target, 0.1, 0.9)
+    weight = jnp.where(current_v < target, self.config.expectile, 1-self.config.expectile)
     loss = ((sg(target) - current_v) ** 2) * weight
     #loss = -dist.log_prob(sg(target)) * weight
     if self.config.critic_slowreg == 'logprob':

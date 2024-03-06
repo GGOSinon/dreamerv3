@@ -1,13 +1,15 @@
 def main():
 
   import warnings
-  import dreamerv3
-  from dreamerv3 import embodied
+  import dreamerv3_offline as dreamerv3
+  from dreamerv3_offline import embodied
   warnings.filterwarnings('ignore', '.*truncated to dtype int32.*')
   env_name = 'hopper-medium-v2'
+  expectile = 0.1
 
   # See configs.yaml for all options.
   config = embodied.Config(dreamerv3.configs['defaults'])
+  print(config.keys())
   config = config.update(dreamerv3.configs['medium'])
   config = config.update({
       'logdir': f'./logdir/{env_name}',
@@ -17,6 +19,7 @@ def main():
       'jax.prealloc': False,
       'encoder.mlp_keys': 'vector',
       'decoder.mlp_keys': 'vector',
+      'expectile': expectile,
       #'encoder.cnn_keys': 'image',
       #'decoder.cnn_keys': 'image',
       # 'jax.platform': 'cpu',
@@ -46,7 +49,7 @@ def main():
   replay = embodied.replay.Uniform(
       config.batch_length, config.replay_size, logdir / 'replay')
   
-  N = dataset['observations'].shape[0];
+  N = dataset['observations'].shape[0]; N = 128
   is_first = True
   for i in range(N):
       is_last = dataset['terminals'][i] or dataset['timeouts'][i]
